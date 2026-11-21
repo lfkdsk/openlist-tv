@@ -1,0 +1,6 @@
+.gradle/
+build/
+app/build/
+local.properties
+# 官方二进制体积大,用 scripts/fetch-core.sh 从 OpenList 官方发布下载
+app/core/

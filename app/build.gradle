@@ -1,0 +1,36 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.lfkdsk.openlisttv'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.lfkdsk.openlisttv'
+        minSdk 26
+        targetSdk 30
+        versionCode 3
+        versionName '1.2-openlist4.2.10'
+        ndk { abiFilters 'armeabi-v7a' }
+    }
+    // 官方 OpenList 服务器程序(openlist-android-arm)当作原生库打包,安装时解到 nativeLibraryDir,有执行权限
+    sourceSets {
+        main { jniLibs.srcDirs = ['core'] }
+    }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+            // 官方发布的二进制,不要再 strip
+            keepDebugSymbols += ['**/libopenlist.so']
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'com.google.zxing:core:3.5.3'
+    testImplementation 'junit:junit:4.13.2'
+}
