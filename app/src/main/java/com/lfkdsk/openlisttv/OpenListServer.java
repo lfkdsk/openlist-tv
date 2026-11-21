@@ -129,12 +129,20 @@ final class OpenListServer {
         //noinspection ResultOfMethodCallIgnored
         dataDir.mkdirs();
         useStdoutLogging();
+        // 全新安装:新版 OpenList 默认要用户在网页安装向导里设管理员。这里直接用随机密码初始化,
+        // 密码显示在电视上;电视本机浏览随后自动建只读账号,全程不用输密码。
+        String firstAdminPassword = null;
+        if (!new File(dataDir, "data.db").exists()) {
+            firstAdminPassword = randomPassword(12);
+            prefs.edit().putString("initialPassword", firstAdminPassword).putBoolean("initialScanned", true).apply();
+        }
         ProcessBuilder pb = new ProcessBuilder(binary.getAbsolutePath(), "server", "--data", dataDir.getAbsolutePath());
         pb.directory(context.getFilesDir());
         pb.environment().put("HOME", context.getFilesDir().getAbsolutePath());
         pb.environment().put("TMPDIR", context.getCacheDir().getAbsolutePath());
         // Android 不给应用进程设 TZ,Go 程序会按 UTC 记日志、算定时任务;传系统时区进去
         pb.environment().put("TZ", java.util.TimeZone.getDefault().getID());
+        if (firstAdminPassword != null) pb.environment().put("OPENLIST_ADMIN_PASSWORD", firstAdminPassword);
         pb.redirectErrorStream(true);
         try {
             Process p = pb.start();
@@ -218,6 +226,15 @@ final class OpenListServer {
         int delay = Core.backoffSeconds(failures++);
         log.add("— " + delay + " 秒后重启 —");
         worker.postDelayed(() -> { if (wanted) launch(); }, delay * 1000L);
+    }
+
+    /** 随机密码:去掉容易看错的 0/O、1/l/I。 */
+    static String randomPassword(int length) {
+        String chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        java.security.SecureRandom r = new java.security.SecureRandom();
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) sb.append(chars.charAt(r.nextInt(chars.length())));
+        return sb.toString();
     }
 
     /**

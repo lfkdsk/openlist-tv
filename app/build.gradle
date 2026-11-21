@@ -9,8 +9,8 @@ android {
         applicationId 'com.lfkdsk.openlisttv'
         minSdk 26
         targetSdk 30
-        versionCode 4
-        versionName '1.3-openlist4.2.10'
+        versionCode 6
+        versionName '1.5-openlist4.2.10'
         ndk { abiFilters 'armeabi-v7a' }
     }
     // 官方 OpenList 服务器程序(openlist-android-arm)当作原生库打包,安装时解到 nativeLibraryDir,有执行权限

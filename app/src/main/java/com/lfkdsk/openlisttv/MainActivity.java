@@ -206,6 +206,9 @@ public class MainActivity extends Activity {
             a.append("管理员账号是你在管理页安装向导里设置的。\n忘了密码:按「重置管理员密码」,会给 admin 换一个新的随机密码。");
         }
         if (resetResult != null) a.append("\n").append(resetResult);
+        a.append(OpenListApi.hasLocalUser(this)
+                ? "\n电视本机浏览:用内置只读账号 tv_local 自动登录,不用输密码。"
+                : "\n电视本机浏览:第一次进「浏览文件」登录一次管理员,之后自动用内置只读账号,不再要密码。");
         admin.setText(a);
         showPw.setVisibility(initial != null && !Boolean.FALSE.equals(initialized) ? Button.VISIBLE : Button.GONE);
         resetPw.setVisibility(Boolean.FALSE.equals(initialized) ? Button.GONE : Button.VISIBLE);

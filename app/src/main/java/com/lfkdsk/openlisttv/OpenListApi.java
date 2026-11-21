@@ -18,7 +18,9 @@ import java.util.List;
 
 /**
  * 调本机 OpenList 的接口(http://127.0.0.1:端口/api/...)。
- * 登录顺序:记住的账号 → 初始密码(还没改过时) → 访客(管理页里开了访客时)。
+ * 电视本机浏览用一个内置只读账号 tv_local(密码随机,只存在电视上):第一次用管理员身份登录后自动创建,
+ * 之后一直用它自动登录,管理员密码不再保存,改了也不影响。
+ * 登录顺序:tv_local → 管理员(初始密码或用户输入一次)并顺带建 tv_local → 访客。
  * OpenList 的登录凭证只在服务器内存里有效,服务器重启后自动重新登录。阻塞调用,不要在主线程用。
  */
 final class OpenListApi {
@@ -41,6 +43,10 @@ final class OpenListApi {
             this.sign = sign;
         }
     }
+
+    static final String LOCAL_USER = "tv_local";
+    // 1: 访问带密码的目录不用再输密码;12: 可以读压缩包。不给写入、删除、WebDAV。
+    static final int LOCAL_PERMISSION = (1 << 1) | (1 << 12);
 
     private final OpenListServer server;
     private final SharedPreferences prefs;
@@ -78,11 +84,57 @@ final class OpenListApi {
         return prefs.getString("user", "admin");
     }
 
-    /** 用户在登录页输入的账号;登录成功才记住。 */
+    static boolean hasLocalUser(Context context) {
+        return context.getSharedPreferences("browser", Context.MODE_PRIVATE).getString("localPass", null) != null;
+    }
+
+    /** 用户在登录页输入的账号。是管理员就顺带建好 tv_local,之后不再需要、也不保存这个密码。 */
     void login(String user, String password) throws IOException, LoginRequired {
-        token = doLogin(user, password);
+        String t = doLogin(user, password);
         guest = false;
-        prefs.edit().putString("user", user).putString("pass", password).apply();
+        if (provisionLocal(t)) {
+            token = doLogin(LOCAL_USER, prefs.getString("localPass", ""));
+            prefs.edit().putString("user", user).remove("pass").apply();
+        } else {
+            // 不是管理员(建不了用户):只能记住这个账号
+            token = t;
+            prefs.edit().putString("user", user).putString("pass", password).apply();
+        }
+    }
+
+    /** 用管理员凭证建(或重置)tv_local,成功后把它的随机密码存在电视上。 */
+    private boolean provisionLocal(String adminToken) {
+        String pass = OpenListServer.randomPassword(24);
+        try {
+            JSONObject u = new JSONObject();
+            u.put("username", LOCAL_USER);
+            u.put("password", pass);
+            u.put("base_path", "/");
+            u.put("role", 0);
+            u.put("permission", LOCAL_PERMISSION);
+            u.put("disabled", false);
+            JSONObject r = call("POST", "/api/admin/user/create", u, adminToken);
+            if (r.optInt("code") != 200) {
+                // 已经有了(比如重装过应用):找到它,把密码重置成新的
+                JSONObject list = call("GET", "/api/admin/user/list?page=1&per_page=500", null, adminToken);
+                JSONObject data = list.optJSONObject("data");
+                JSONArray content = data != null ? data.optJSONArray("content") : null;
+                if (content == null) return false;
+                long id = -1;
+                for (int i = 0; i < content.length(); i++) {
+                    JSONObject o = content.optJSONObject(i);
+                    if (o != null && LOCAL_USER.equals(o.optString("username"))) id = o.optLong("id");
+                }
+                if (id < 0) return false;
+                u.put("id", id);
+                r = call("POST", "/api/admin/user/update", u, adminToken);
+                if (r.optInt("code") != 200) return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        prefs.edit().putString("localPass", pass).apply();
+        return true;
     }
 
     void forget() {
@@ -105,21 +157,33 @@ final class OpenListApi {
     /** 确保有可用身份;拿不到就抛 LoginRequired(界面弹登录页)。 */
     private void ensureSession() throws IOException, LoginRequired {
         if (token != null || guest) return;
-        String pass = prefs.getString("pass", null);
-        if (pass != null) {
+        String local = prefs.getString("localPass", null);
+        if (local != null) {
             try {
-                token = doLogin(savedUser(), pass);
+                token = doLogin(LOCAL_USER, local);
+                return;
+            } catch (LoginRequired e) {
+                // tv_local 被删了或改了密码:往下用管理员重新建
+                prefs.edit().remove("localPass").apply();
+            }
+        }
+        // 管理员:之前记住的(旧版本存过)或初始密码,登录成功就建 tv_local
+        String pass = prefs.getString("pass", null);
+        String initial = server.initialPassword();
+        String[][] admins = {{savedUser(), pass}, {"admin", initial}};
+        for (String[] a : admins) {
+            if (a[1] == null) continue;
+            try {
+                String t = doLogin(a[0], a[1]);
+                if (provisionLocal(t)) {
+                    token = doLogin(LOCAL_USER, prefs.getString("localPass", ""));
+                    prefs.edit().remove("pass").apply();
+                } else {
+                    token = t;
+                }
                 return;
             } catch (LoginRequired e) {
                 // 密码在网页里改过了:往下试
-            }
-        }
-        String initial = server.initialPassword();
-        if (initial != null) {
-            try {
-                token = doLogin("admin", initial);
-                return;
-            } catch (LoginRequired ignored) {
             }
         }
         // 访客:不带凭证请求自己的信息,没被禁用就能用
