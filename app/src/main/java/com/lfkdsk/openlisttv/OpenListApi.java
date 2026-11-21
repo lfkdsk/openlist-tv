@@ -52,6 +52,24 @@ final class OpenListApi {
         prefs = context.getSharedPreferences("browser", Context.MODE_PRIVATE);
     }
 
+    /**
+     * 安装向导是否完成(/api/public/init_status)。新版 OpenList 不再自动建带初始密码的管理员,
+     * 第一次打开管理页时由安装向导让用户自己设账号密码。拿不到返回 null。
+     */
+    static Boolean initialized(int port) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/api/public/init_status").openConnection();
+            c.setConnectTimeout(2000);
+            c.setReadTimeout(3000);
+            JSONObject j = new JSONObject(read(c.getInputStream()));
+            c.disconnect();
+            JSONObject d = j.optJSONObject("data");
+            return d != null ? d.optBoolean("initialized", true) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     String base() {
         return "http://127.0.0.1:" + server.port();
     }

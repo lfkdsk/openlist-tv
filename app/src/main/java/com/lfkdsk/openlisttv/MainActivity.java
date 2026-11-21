@@ -170,11 +170,12 @@ public class MainActivity extends Activity {
             boolean alive = server.processAlive();
             String ip = lanAddress();
             int port = server.port();
-            main.post(() -> render(listening, alive, ip, port));
+            Boolean initialized = listening ? OpenListApi.initialized(port) : null;
+            main.post(() -> render(listening, alive, ip, port, initialized));
         }, "status").start();
     }
 
-    private void render(boolean listening, boolean alive, String ip, int port) {
+    private void render(boolean listening, boolean alive, String ip, int port, Boolean initialized) {
         String url = ip != null ? "http://" + ip + ":" + port : null;
         if (url != null && !url.equals(shownUrl)) {
             qr.setImageBitmap(qrBitmap(url, dp(236)));
@@ -194,12 +195,20 @@ public class MainActivity extends Activity {
         address.setText(url == null ? "电视还没有联网" : "管理页:" + url + "\nWebDAV:" + url + "/dav   (用管理员或网页里建的用户登录)");
 
         String initial = server.initialPassword();
-        StringBuilder a = new StringBuilder("管理员用户名:admin");
-        if (initial != null) a.append(showInitial ? "\n初始密码:" + initial : "\n初始密码:已隐藏(按「显示初始密码」)");
-        else a.append("\n密码已经改过;忘了可以按「重置管理员密码」");
+        StringBuilder a = new StringBuilder();
+        if (Boolean.FALSE.equals(initialized)) {
+            a.append("第一次使用:用手机扫左边的二维码打开管理页,按安装向导设置管理员账号和密码。");
+        } else if (initial != null) {
+            // 旧版 OpenList 或设了 OPENLIST_ADMIN_PASSWORD 时,首次启动会打印初始密码
+            a.append("管理员用户名:admin");
+            a.append(showInitial ? "\n初始密码:" + initial : "\n初始密码:已隐藏(按「显示初始密码」)");
+        } else {
+            a.append("管理员账号是你在管理页安装向导里设置的。\n忘了密码:按「重置管理员密码」,会给 admin 换一个新的随机密码。");
+        }
         if (resetResult != null) a.append("\n").append(resetResult);
         admin.setText(a);
-        showPw.setVisibility(initial != null ? Button.VISIBLE : Button.GONE);
+        showPw.setVisibility(initial != null && !Boolean.FALSE.equals(initialized) ? Button.VISIBLE : Button.GONE);
+        resetPw.setVisibility(Boolean.FALSE.equals(initialized) ? Button.GONE : Button.VISIBLE);
         showPw.setText(showInitial ? "隐藏初始密码" : "显示初始密码");
         logBtn.setText(showLog ? "收起日志" : "查看日志");
         player.setText("默认播放器:" + Players.currentLabel(this));
