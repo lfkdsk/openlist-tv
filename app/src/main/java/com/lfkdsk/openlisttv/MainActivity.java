@@ -107,7 +107,8 @@ public class MainActivity extends Activity {
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         toggle = button("停止服务", v -> {
-            if (server.processAlive() || server.listening()) server.stop(); else server.start(true);
+            // 只看进程在不在(本地判断);连端口是网络操作,不能放在主线程(会 NetworkOnMainThreadException 闪退)
+            if (server.processAlive()) server.stop(); else server.start(true);
             refresh();
         });
         showPw = button("显示初始密码", v -> { showInitial = !showInitial; refresh(); });
